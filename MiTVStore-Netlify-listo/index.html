@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mi TV Store</title><link rel="stylesheet" href="assets/style.css"></head>
+<body>
+<header><div class="wrap"><h1>📺 Mi TV Store</h1><p>Aplicaciones Android</p></div></header>
+<main class="wrap"><div id="status" class="status">Cargando aplicaciones...</div><div id="apps" class="grid"></div></main>
+<footer>Mi TV Store</footer>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/config.js"></script>
+<script>
+const {createClient}=supabase; const db=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+async function loadApps(){
+ const box=document.getElementById('apps'), st=document.getElementById('status');
+ const {data,error}=await db.from('apps').select('*').eq('published',true).order('created_at',{ascending:false});
+ if(error){st.textContent='No se pudieron cargar las aplicaciones.';return}
+ st.remove(); box.innerHTML=data.length?'':'<div class="empty">Todavía no hay aplicaciones.</div>';
+ data.forEach(a=>{box.insertAdjacentHTML('beforeend',`<article class="card">
+ <div class="icon">${(a.name||'APP').slice(0,2).toUpperCase()}</div>
+ <h2>${escapeHtml(a.name)}</h2><span class="version">v${escapeHtml(a.version||'1.0')}</span>
+ <p>${escapeHtml(a.description||'Aplicación Android')}</p>
+ <a class="download" href="${a.file_url}" download rel="noopener">Descargar APK</a>
+ </article>`)});
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+loadApps();
+</script></body></html>
