@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#101225">
+<title>Mi TV Store · Aplicaciones Android</title><link rel="stylesheet" href="assets/style.css"></head>
+<body>
+<header><div class="wrap nav"><a class="brand" href="/"><span class="brand-icon">📺</span><span><strong>Mi TV Store</strong><small>Aplicaciones Android</small></span></a><a class="nav-link" href="#apps" tabindex="-1">Explorar apps <span>↘</span></a></div></header>
+<main class="wrap">
+<section class="hero"><div class="hero-copy"><span class="eyebrow">✦ TU ESPACIO ANDROID</span><h1>Tus próximas apps favoritas, <span>en un solo lugar.</span></h1><p>Explorá la colección, encontrá lo que necesitás y descargá en unos pocos pasos.</p><div class="hero-pills"><span>⚡ Fácil de usar</span><span>📱 Android y TV</span><span>🎨 Nuevo estilo</span></div></div><div class="hero-art" aria-hidden="true"><div class="orb orb-one"></div><div class="orb orb-two"></div><div class="screen-art">▶<small>MI TV STORE</small></div><span class="spark spark-a">✦</span><span class="spark spark-b">✧</span></div></section>
+<section id="apps" class="catalog"><div class="section-head"><div><span class="eyebrow">DESCUBRÍ</span><h2>Explorá las aplicaciones</h2><p>Las apps que publiques desde el administrador aparecerán acá automáticamente.</p></div><span class="catalog-badge">● Catálogo actualizado</span></div>
+<div class="toolbar"><div class="search-group"><label class="search"><span aria-hidden="true">⌕</span><input id="searchInput" tabindex="0" type="search" placeholder="Buscar una aplicación..." aria-label="Buscar aplicaciones"></label><button id="searchButton" class="search-button" type="button">Buscar apps <span aria-hidden="true">⌕</span></button></div><div class="filters"><button class="filter active" type="button" data-filter="all">Todas las apps</button></div></div>
+<div id="status" class="status"><span class="loader"></span> Cargando aplicaciones...</div><div id="appsGrid" class="grid"></div><div id="empty" class="empty hidden"><span>🔎</span><h3>No encontramos resultados</h3><p>Probá con otra búsqueda.</p></div></section>
+</main><footer><div class="wrap footer-inner"><a class="brand footer-brand" href="/"><span class="brand-icon">📺</span><span><strong>Mi TV Store</strong><small>Aplicaciones Android</small></span></a><span>Descargá archivos únicamente de fuentes confiables.</span></div></footer>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="assets/config.js"></script><script>
+const db=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:(url,options={})=>fetch(url,{...options,cache:'no-store'})}});const grid=document.getElementById('appsGrid'),statusBox=document.getElementById('status'),search=document.getElementById('searchInput'),empty=document.getElementById('empty');let allApps=[];
+function esc(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function render(){const q=search.value.trim().toLocaleLowerCase('es');const shown=allApps.filter(a=>(String(a.name||'')+' '+String(a.description||'')+' '+String(a.version||'')).toLocaleLowerCase('es').includes(q));grid.innerHTML=shown.map((a,i)=>`<article class="card" style="--accent:${['#8b5cf6','#ec4899','#06b6d4','#f59e0b','#10b981','#3b82f6'][i%6]}"><div class="card-top"><div class="app-icon">${esc((a.name||'APP').trim().slice(0,2).toUpperCase())}</div><span class="app-tag">ANDROID</span></div><h3>${esc(a.name||'Aplicación')}</h3><span class="version">Versión ${esc(a.version||'1.0')}</span><p>${esc(a.description||'Aplicación Android disponible para descargar.')}</p><a class="download" href="${esc(a.file_url)}" target="_blank" rel="noopener noreferrer">Descargar APK <span>↗</span></a></article>`).join('');empty.classList.toggle('hidden',shown.length>0);}
+async function loadApps(){let timer;try{const result=await Promise.race([db.from('apps').select('id,name,version,description,file_url,created_at').eq('published',true).order('created_at',{ascending:false}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('timeout')),12000)})]);clearTimeout(timer);const {data,error}=result;statusBox.classList.add('hidden');if(error){statusBox.textContent='No se pudieron cargar las aplicaciones. Intentá actualizar la página.';statusBox.classList.remove('hidden');return}allApps=data||[];if(!allApps.length){empty.innerHTML='<span>✨</span><h3>Próximamente</h3><p>Estamos preparando nuevas aplicaciones. Volvé pronto.</p>';empty.classList.remove('hidden');return}render()}catch(e){clearTimeout(timer);statusBox.textContent='La conexión está tardando. Revisá tu conexión e intentá actualizar.';statusBox.classList.remove('hidden');}}
+search.addEventListener('input',render);document.getElementById('searchButton').addEventListener('click',()=>{render();const first=document.querySelector('#appsGrid a.download');if(first){first.focus();first.scrollIntoView({block:'nearest',behavior:'auto'});}});
+// En Android TV, las flechas del control remoto mueven el foco entre botones Descargar APK.
+// El texto de las tarjetas nunca recibe foco ni se selecciona.
+document.addEventListener('keydown',function(e){
+ const key=e.key; if(!['ArrowDown','ArrowUp','ArrowLeft','ArrowRight'].includes(key)) return;
+ const buttons=Array.from(document.querySelectorAll('#appsGrid a.download'));
+ if(!buttons.length) return;
+ e.preventDefault(); e.stopPropagation();
+ const active=document.activeElement;
+ let current=buttons.indexOf(active);
+ if(current<0){ buttons[0].focus(); buttons[0].scrollIntoView({block:'nearest',inline:'nearest'}); return; }
+ const rect=buttons[current].getBoundingClientRect();
+ const cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
+ let candidates=buttons.map((b,i)=>{const r=b.getBoundingClientRect();return {b,i,x:r.left+r.width/2,y:r.top+r.height/2};}).filter(o=>o.i!==current);
+ candidates=candidates.filter(o=>key==='ArrowRight'?o.x>cx+2:key==='ArrowLeft'?o.x<cx-2:key==='ArrowDown'?o.y>cy+2:o.y<cy-2);
+ candidates.sort((a,b)=>{const da=Math.hypot(a.x-cx,a.y-cy),db=Math.hypot(b.x-cx,b.y-cy);return da-db;});
+ if(candidates.length){candidates[0].b.focus();candidates[0].b.scrollIntoView({block:'nearest',inline:'nearest'});}
+});
+document.addEventListener('selectstart',e=>{if(!e.target.closest('input,textarea'))e.preventDefault();});
+loadApps();
+</script></body></html>
