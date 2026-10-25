@@ -1,0 +1,12 @@
+MITVSTORE - IMPORTAR APK DE UNA CARPETA DE GOOGLE DRIVE
+
+1. En Google Cloud Console, seleccioná un proyecto y habilitá Google Drive API.
+2. Creá una API key (clave de API). Restringila a la API de Google Drive; no la pegues en el HTML ni la publiques en GitHub.
+3. En Netlify > Site configuration > Environment variables, agregá DRIVE_API_KEY con esa clave. Volvé a desplegar el sitio.
+4. Compartí la carpeta de Google Drive como «Cualquier persona con el enlace» > Lector. Asegurate de que los archivos también sean accesibles.
+5. En /admin, iniciá sesión, pegá el enlace de la carpeta y tocá «Buscar APK». Revisá los resultados y publicá los seleccionados.
+
+ATENCIÓN: La API de Google Drive puede requerir OAuth para listar ciertas carpetas incluso cuando el enlace es público. Si aparece un error de permisos, no se puede resolver solamente cambiando Firestore; se necesitará implementar autorización OAuth o un inventario de archivos autorizado.
+Google Drive no garantiza descargas directas sin confirmaciones, ni uso intensivo como CDN. Probá cada enlace en un dispositivo real.
+No se transfieren los APK a Firebase: solo se registran enlaces. Los archivos deben seguir existiendo en Drive.
+Solo importá APK propios o que tengas permiso para distribuir.

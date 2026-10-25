@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin · Mi TV Store</title><link rel="stylesheet" href="../assets/style.css"></head>
+<body><header><div class="wrap"><h1>⚙️ Administrador</h1><p>Mi TV Store</p></div></header>
+<main class="wrap">
+<section id="login" class="panel"><h2>Iniciar sesión</h2>
+<input id="email" type="email" placeholder="Correo"><input id="password" type="password" placeholder="Contraseña">
+<button id="loginBtn">Entrar</button><div id="loginMsg" class="msg"></div></section>
+<section id="dashboard" class="hidden">
+<div class="panel"><h2>Subir APK</h2>
+<input id="name" placeholder="Nombre de la aplicación">
+<input id="version" placeholder="Versión (ej. 1.0)">
+<textarea id="description" placeholder="Descripción"></textarea>
+<input id="apk" type="file" accept=".apk,application/vnd.android.package-archive"><input id="apkUrl" type="url" placeholder="O pegá el enlace HTTPS de descarga del APK"><p><small>Para subir archivos directamente necesitás Firebase Storage habilitado. Si no, podés usar un enlace HTTPS a tu APK.</small></p>
+<button id="uploadBtn">Subir aplicación</button><div id="uploadMsg" class="msg"></div></div>
+<div class="panel"><h2>Importar APK desde una carpeta de Google Drive</h2>
+<p>Pegá el enlace de una carpeta compartida públicamente. Se detectarán los archivos .apk y podrás elegir cuáles publicar.</p>
+<input id="driveFolder" type="url" placeholder="https://drive.google.com/drive/folders/..."><button id="scanDriveBtn">Buscar APK</button>
+<div id="driveMsg" class="msg" role="status"></div><div id="driveResults"></div>
+<button id="importDriveBtn" class="hidden">Publicar APK seleccionados</button></div>
+<div class="panel"><h2>Aplicaciones</h2><div id="list"></div></div>
+<button id="logoutBtn" class="secondary">Cerrar sesión</button>
+</section></main>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+<script src="../assets/config.js"></script>
+<script>
+const auth=firebase.auth(), storage=firebase.storage(), $=id=>document.getElementById(id);
+function showLogin(){$('login').classList.remove('hidden');$('dashboard').classList.add('hidden')}
+function showDash(){$('login').classList.add('hidden');$('dashboard').classList.remove('hidden');loadList()}
+auth.onAuthStateChanged(user=>{if(user)showDash();else showLogin()});
+$('loginBtn').onclick=async()=>{try{await auth.signInWithEmailAndPassword($('email').value,$('password').value);$('loginMsg').textContent='';}catch(e){$('loginMsg').textContent=e.message}};
+$('logoutBtn').onclick=()=>auth.signOut();
+$('uploadBtn').onclick=async()=>{
+ const file=$('apk').files[0], givenUrl=$('apkUrl').value.trim();
+ if(!file&&!givenUrl){$('uploadMsg').textContent='Elegí un APK o pegá un enlace HTTPS.';return}
+ if(file&&!file.name.toLowerCase().endsWith('.apk')){$('uploadMsg').textContent='Solo se permiten archivos APK.';return}
+ if(file&&file.size>50*1024*1024){$('uploadMsg').textContent='El archivo supera el límite de 50 MB de este formulario.';return}
+ if(!file&&!/^https:\/\//i.test(givenUrl)){$('uploadMsg').textContent='El enlace debe empezar con https://';return}
+ const user=auth.currentUser;if(!user)return;
+ $('uploadBtn').disabled=true;$('uploadMsg').textContent='Publicando...';
+ let path='',url=givenUrl;
+ try{
+   if(file){path='apks/'+user.uid+'/'+Date.now()+'-'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');const ref=storage.ref(path);await ref.put(file,{contentType:'application/vnd.android.package-archive'});url=await ref.getDownloadURL()}
+   await firestore.collection('apps').add({name:$('name').value.trim()||(file?.name||'Aplicación'),version:$('version').value.trim()||'1.0',description:$('description').value.trim(),file_url:url,file_path:path,published:true,created_by:user.uid,created_at:firebase.firestore.FieldValue.serverTimestamp()});
+   $('uploadMsg').textContent='¡Aplicación publicada!';for(const id of ['name','version','description','apk','apkUrl'])$(id).value='';loadList();
+ }catch(e){$('uploadMsg').textContent='Error: '+e.message+' (revisá las reglas y Storage)';console.error(e)}finally{$('uploadBtn').disabled=false}
+};
+
+let driveFiles=[];
+function extractFolderId(link){try{const u=new URL(link);if(!['drive.google.com','www.drive.google.com'].includes(u.hostname))return null;return u.pathname.match(/\/folders\/([a-zA-Z0-9_-]+)/)?.[1]||u.searchParams.get('id')}catch{return null}}
+$('scanDriveBtn').onclick=async()=>{
+ const folderId=extractFolderId($('driveFolder').value.trim());if(!folderId){$('driveMsg').textContent='Pegá un enlace válido de una carpeta de Google Drive.';return}
+ $('scanDriveBtn').disabled=true;$('driveMsg').textContent='Buscando APK...';$('driveResults').replaceChildren();$('importDriveBtn').classList.add('hidden');driveFiles=[];
+ try{const r=await fetch('/.netlify/functions/drive-apks?folderId='+encodeURIComponent(folderId));const data=await r.json();if(!r.ok)throw Error(data.error||'Error al consultar Drive');driveFiles=data.files||[];
+ $('driveMsg').textContent=driveFiles.length+' APK detectados. Revisá los archivos antes de publicarlos.';
+ for(const f of driveFiles){const label=document.createElement('label');label.style.display='block';label.style.margin='10px 0';const check=document.createElement('input');check.type='checkbox';check.checked=true;check.dataset.fileId=f.id;label.append(check,document.createTextNode(' '+f.name));$('driveResults').append(label)}
+ if(driveFiles.length)$('importDriveBtn').classList.remove('hidden');
+ }catch(e){$('driveMsg').textContent='Error: '+e.message}finally{$('scanDriveBtn').disabled=false}
+};
+$('importDriveBtn').onclick=async()=>{
+ const user=auth.currentUser;if(!user){$('driveMsg').textContent='Iniciá sesión como administrador.';return}
+ const selected=[...$('driveResults').querySelectorAll('input:checked')].map(c=>driveFiles.find(f=>f.id===c.dataset.fileId)).filter(Boolean);
+ if(!selected.length){$('driveMsg').textContent='Seleccioná al menos un APK.';return}
+ $('importDriveBtn').disabled=true;let ok=0;
+ try{for(const f of selected){$('driveMsg').textContent='Publicando '+(ok+1)+' de '+selected.length+'...';await firestore.collection('apps').add({name:f.name.replace(/\.apk$/i,''),version:'1.0',description:'',file_url:'https://drive.google.com/uc?export=download&id='+encodeURIComponent(f.id),file_path:'',drive_file_id:f.id,published:true,created_by:user.uid,created_at:firebase.firestore.FieldValue.serverTimestamp()});ok++}
+ $('driveMsg').textContent='Publicadas '+ok+' aplicaciones. Probá los enlaces de descarga: Drive puede limitar o mostrar confirmaciones.';loadList();
+ }catch(e){$('driveMsg').textContent='Se publicaron '+ok+' de '+selected.length+'. Error: '+e.message}finally{$('importDriveBtn').disabled=false}
+};
+
+async function loadList(){const box=$('list');try{const snapshot=await firestore.collection('apps').get();const data=snapshot.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.created_at?.toMillis?.()||0)-(a.created_at?.toMillis?.()||0));box.replaceChildren();if(!data.length){box.textContent='No hay aplicaciones.';return}data.forEach(a=>{const row=document.createElement('div');row.className='row';const info=document.createElement('div');const title=document.createElement('b');title.textContent=a.name||'Aplicación';const version=document.createElement('small');version.textContent=' v'+(a.version||'1.0');info.append(title,version);const button=document.createElement('button');button.textContent='Eliminar';button.onclick=()=>delApp(a.id,a.file_path||'');row.append(info,button);box.append(row)})}catch(e){box.textContent='Error: '+e.message}}
+async function delApp(id,path){if(!confirm('¿Eliminar esta aplicación?'))return;try{await firestore.collection('apps').doc(id).delete();if(path.startsWith('apks/')){try{await storage.ref(path).delete()}catch(e){alert('Se eliminó del catálogo, pero no se pudo borrar el archivo: '+e.message)}}loadList()}catch(e){alert('Error: '+e.message)}}
+</script></body></html>
