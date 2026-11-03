@@ -1,10 +1,63 @@
 <!doctype html>
-<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Administrar · Mi TV Store</title><link rel="stylesheet" href="../assets/style.css"></head>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Administrar · Mi TV Store</title><link rel="stylesheet" href="../assets/style.css"><style>
+#tvRemoteCursor{position:fixed;z-index:999999;left:0;top:0;width:22px;height:30px;pointer-events:none;filter:drop-shadow(0 1px 2px #000)}
+#tvRemoteCursor svg{display:block}
+.tv-pointer-hover{outline:2px solid #c4b5fd!important;outline-offset:3px}
+.tv-cursor-click{filter:drop-shadow(0 0 5px #a78bfa)}
+</style></head>
 <body><main class="wrap" style="max-width:850px;padding:35px 0"><a class="brand" href="../"><span class="brand-icon">📺</span><span><strong>Mi TV Store</strong><small>Panel de administración</small></span></a>
 <section id="login" class="panel" style="margin-top:24px"><h2>Iniciar sesión</h2><input id="email" type="email" autocomplete="username" placeholder="Correo" style="display:block;width:100%;padding:13px;margin:10px 0;border-radius:10px"><input id="password" type="password" autocomplete="current-password" placeholder="Contraseña" style="display:block;width:100%;padding:13px;margin:10px 0;border-radius:10px"><button id="loginBtn">Entrar</button><div id="loginMsg" class="msg" role="status"></div></section>
 <section id="dashboard" class="hidden"><div class="panel"><h2>Subir APK</h2><input id="name" maxlength="100" placeholder="Nombre de la aplicación" style="display:block;width:100%;padding:12px;margin:8px 0"><input id="version" maxlength="30" placeholder="Versión (ej. 1.0)" style="display:block;width:100%;padding:12px;margin:8px 0"><textarea id="description" maxlength="1000" placeholder="Descripción" style="display:block;width:100%;padding:12px;margin:8px 0"></textarea><label for="apk">Archivo APK (máximo 50 MB)</label><input id="apk" type="file" accept=".apk,application/vnd.android.package-archive" style="display:block;margin:12px 0"><button id="uploadBtn">Subir aplicación</button><div id="uploadMsg" class="msg" role="status"></div></div>
 <div class="panel" style="margin-top:18px"><h2>Aplicaciones publicadas</h2><div id="list">Cargando...</div></div><button id="logoutBtn" style="margin-top:15px">Cerrar sesión</button></section></main>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="../assets/config.js"></script><script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+/* Cursor controlado con el control remoto de Android TV */
+(function tvRemotePointer(){
+ const cursor=document.createElement('div');
+ cursor.id='tvRemoteCursor';cursor.setAttribute('aria-hidden','true');
+ cursor.innerHTML='<svg viewBox="0 0 20 27" width="20" height="27"><path d="M2 1 L2 20 L7 15 L11 25 L15 23 L11 13 L19 13 Z" fill="#fff" stroke="#111827" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+ document.body.appendChild(cursor);
+ let x=Math.max(8,Math.min(window.innerWidth-22,window.innerWidth*.5));
+ let y=Math.max(8,Math.min(window.innerHeight-30,window.innerHeight*.4));
+ let lastMove=0;
+ function paint(){cursor.style.transform='translate3d('+x+'px,'+y+'px,0)';}
+ function move(dx,dy){
+  const now=Date.now(),step=now-lastMove<90?22:15;lastMove=now;
+  x=Math.max(1,Math.min(window.innerWidth-21,x+dx*step));
+  y=Math.max(1,Math.min(window.innerHeight-28,y+dy*step));
+  const edge=65;
+  if(dy>0&&y>window.innerHeight-edge){window.scrollBy({top:step*2,behavior:'auto'});y=window.innerHeight-edge;}
+  else if(dy<0&&y<edge&&window.scrollY>0){window.scrollBy({top:-step*2,behavior:'auto'});y=edge;}
+  paint();
+  document.querySelectorAll('.tv-pointer-hover').forEach(el=>el.classList.remove('tv-pointer-hover'));
+  const target=document.elementFromPoint(x+2,y+2);
+  if(target){const hit=target.closest('a,button,input,select,textarea,[role="button"],[tabindex]:not([tabindex="-1"])');if(hit)hit.classList.add('tv-pointer-hover');}
+ }
+ function clickAtCursor(){
+  paint();const target=document.elementFromPoint(x+3,y+3);if(!target)return;
+  const hit=target.closest('a,button,input,select,textarea,[role="button"],[tabindex]:not([tabindex="-1"])')||target;
+  if(hit.matches('input,textarea')){hit.focus();return;}
+  if(hit.matches('select')){hit.focus();hit.click();return;}
+  cursor.classList.remove('tv-cursor-click');void cursor.offsetWidth;cursor.classList.add('tv-cursor-click');
+  hit.click();
+ }
+ document.addEventListener('keydown',function(e){
+  const typing=document.activeElement&&/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){
+   if(typing)return;
+   e.preventDefault();e.stopImmediatePropagation();
+   move(e.key==='ArrowLeft'?-1:e.key==='ArrowRight'?1:0,e.key==='ArrowUp'?-1:e.key==='ArrowDown'?1:0);return;
+  }
+  if(e.key==='Enter'||e.key==='NumpadEnter'||e.key===' '){
+   if(typing)return;
+   e.preventDefault();e.stopImmediatePropagation();clickAtCursor();
+  }
+ },true);
+ document.addEventListener('mousemove',function(e){if(e.detail>0){x=e.clientX;y=e.clientY;paint();cursor.style.opacity='0';}});
+ document.addEventListener('keydown',function(e){if(e.key.startsWith('Arrow'))cursor.style.opacity='1';},true);
+ window.addEventListener('resize',()=>{x=Math.min(x,window.innerWidth-22);y=Math.min(y,window.innerHeight-30);paint();});
+ paint();
+})();
+</script><script src="../assets/config.js"></script><script>
 const $=id=>document.getElementById(id);let sb=null;
 function showLogin(){$('login').classList.remove('hidden');$('dashboard').classList.add('hidden')}
 async function showDashboard(){$('login').classList.add('hidden');$('dashboard').classList.remove('hidden');await loadList()}
